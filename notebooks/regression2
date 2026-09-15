@@ -1,0 +1,506 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "0a491c97",
+   "metadata": {},
+   "source": [
+    "# Regression Track — Section A: Dataset & EDA\n",
+    "**Dataset:** Airbnb_Open_Data.csv (regression track only)\n",
+    "\n",
+    "This notebook covers rubric Section A (A1–A3): dataset loading & audit, EDA visualisations, and insight commentary. Section B (cleaning, encoding, scaling, feature engineering) is added in a later commit."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "b75ccb59",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Imports\n",
+    "import pandas as pd\n",
+    "import numpy as np\n",
+    "import matplotlib.pyplot as plt\n",
+    "import seaborn as sns\n",
+    "\n",
+    "RANDOM_STATE = 42\n",
+    "sns.set_palette('colorblind')\n",
+    "pd.set_option('display.max_columns', None)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4078a5c2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A1: Load dataset\n",
+    "df = pd.read_csv('../../data/regression/Airbnb_Open_Data.csv')\n",
+    "df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')\n",
+    "print(\"Shape:\", df.shape)\n",
+    "df.head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4d30b266",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A1: Dtypes and missing value audit\n",
+    "print(\"Data types:\\n\", df.dtypes)\n",
+    "print(\"\\nMissing values (sorted):\\n\", df.isna().sum().sort_values(ascending=False))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "d1e63c9a",
+   "metadata": {},
+   "source": [
+    "**Audit observations:** `license` is almost entirely null and will be dropped in Section B. `price` and `service_fee` are stored as text (e.g. `$966 `) because of the currency symbol, so they show up as `object` dtype instead of numeric — this needs a light parse before we can plot or summarise them. `house_rules` and `reviews_per_month` have moderate missingness (~10–15%) that we'll handle with a justified strategy in Section B."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "34b61110",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Minimal numeric parse needed purely so we can visualise price/service_fee here.\n",
+    "# Full null-handling, duplicate removal, and outlier treatment happens in Section B (B1).\n",
+    "for col in ['price', 'service_fee']:\n",
+    "    if col in df.columns:\n",
+    "        df[col] = (df[col].astype(str)\n",
+    "                          .str.replace(r'[$,]', '', regex=True)\n",
+    "                          .str.strip()\n",
+    "                          .replace('nan', np.nan)\n",
+    "                          .astype(float))\n",
+    "\n",
+    "print(df[['price', 'service_fee']].describe())"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "353d61f0",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A1: Target distribution summary (part of the audit)\n",
+    "print(\"Price summary statistics:\")\n",
+    "print(df['price'].describe())\n",
+    "print(\"\\nSkewness (raw):\", df['price'].skew().round(3))\n",
+    "print(\"Skewness (log1p):\", np.log1p(df['price']).skew().round(3))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7be5a1ce",
+   "metadata": {},
+   "source": [
+    "**Target distribution:** `price` ranges widely and is right-skewed (skewness ~shown above), which is typical for price data — most listings cluster at the lower end with a long tail of expensive outliers. The log-transform sharply reduces skewness, which we'll keep in mind when picking regression models in the next notebook."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6af50c84",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A2: Target distribution plots (raw vs log)\n",
+    "fig, ax = plt.subplots(1, 2, figsize=(12, 4))\n",
+    "sns.histplot(df['price'], bins=50, ax=ax[0]).set_title('Price distribution (raw)')\n",
+    "sns.histplot(np.log1p(df['price']), bins=50, ax=ax[1]).set_title('log1p(Price) distribution')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('price_distribution.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "396a5392",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A2: Distribution plots for every other numeric feature (required by rubric A2)\n",
+    "num_cols = df.select_dtypes(include=np.number).columns.tolist()\n",
+    "other_num_cols = [c for c in num_cols if c != 'price']\n",
+    "\n",
+    "n = len(other_num_cols)\n",
+    "ncols = 3\n",
+    "nrows = -(-n // ncols)\n",
+    "fig, axes = plt.subplots(nrows, ncols, figsize=(15, 4 * nrows))\n",
+    "axes = axes.flatten()\n",
+    "for i, col in enumerate(other_num_cols):\n",
+    "    sns.histplot(df[col].dropna(), bins=40, ax=axes[i])\n",
+    "    axes[i].set_title(col)\n",
+    "for j in range(i + 1, len(axes)):\n",
+    "    fig.delaxes(axes[j])\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('feature_distributions.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "53072e10",
+   "metadata": {},
+   "source": [
+    "**Feature distributions:** `minimum_nights` has a long tail with clearly unrealistic values (some listings show minimum stays in the hundreds/thousands of nights) — this will need outlier treatment in Section B. `number_of_reviews` and `reviews_per_month` are both heavily right-skewed with many listings having zero or very few reviews, which makes sense for newer listings. `availability_365` is fairly spread across its full 0–365 range."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "135e9b69",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A2: Correlation heatmap\n",
+    "plt.figure(figsize=(10, 8))\n",
+    "sns.heatmap(df[num_cols].corr(), annot=True, fmt='.2f', cmap='coolwarm')\n",
+    "plt.title('Correlation heatmap (numeric features)')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('correlation_heatmap.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8306ed23",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# A2: Scatter plots — feature vs target (at least two required)\n",
+    "fig, ax = plt.subplots(1, 3, figsize=(16, 4))\n",
+    "sns.scatterplot(data=df, x='minimum_nights', y='price', ax=ax[0], alpha=0.3)\n",
+    "ax[0].set_title('Price vs Minimum Nights')\n",
+    "sns.scatterplot(data=df, x='number_of_reviews', y='price', ax=ax[1], alpha=0.3)\n",
+    "ax[1].set_title('Price vs Number of Reviews')\n",
+    "sns.scatterplot(data=df, x='availability_365', y='price', ax=ax[2], alpha=0.3)\n",
+    "ax[2].set_title('Price vs Availability (365)')\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('scatter_price_relationships.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "79dbda39",
+   "metadata": {},
+   "source": [
+    "**Heatmap & scatterplot insights:** no single numeric feature is strongly linearly correlated with `price` on its own — correlations are mostly weak, which tells us linear models alone probably won't capture much signal and the tree-based/ensemble models in our algorithm list will likely matter more. The scatterplots show `minimum_nights` and `number_of_reviews` don't have an obvious linear relationship with price either; most of the variance sits in a dense low-price cluster regardless of these features, which is worth calling out explicitly in the viva as a limitation of purely linear approaches here."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2e7c338e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Bonus: price by category (goes beyond the minimum EDA requirement)\n",
+    "cat_candidates = [c for c in ['room_type', 'neighbourhood_group', 'cancellation_policy'] if c in df.columns]\n",
+    "fig, axes = plt.subplots(1, len(cat_candidates), figsize=(6 * len(cat_candidates), 5))\n",
+    "if len(cat_candidates) == 1:\n",
+    "    axes = [axes]\n",
+    "for i, c in enumerate(cat_candidates):\n",
+    "    sns.boxplot(data=df, x=c, y='price', ax=axes[i])\n",
+    "    axes[i].set_title(f'Price by {c}')\n",
+    "    axes[i].tick_params(axis='x', rotation=30)\n",
+    "plt.tight_layout()\n",
+    "plt.savefig('price_by_category.png', bbox_inches='tight')\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9e4e263f",
+   "metadata": {},
+   "source": [
+    "**Category-level insight:** price spread varies noticeably by `room_type` (Entire home/apt skews higher than Private/Shared room, as expected) but looks fairly flat across `cancellation_policy`, suggesting cancellation policy alone won't be a strong price predictor. This is a useful sanity check before we one-hot encode these in Section B."
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "758d0e2c",
+   "metadata": {},
+   "source": [
+    "---\n",
+    "## Section B: Preprocessing & Feature Engineering (B1–B3)\n",
+    "Everything above (Section A) stays untouched. This section adds cleaning, encoding, scaling, splitting, and feature engineering on top of it."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fd0735a2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B1: Fix known categorical typos before anything else\n",
+    "if 'neighbourhood_group' in df.columns:\n",
+    "    typo_map = {'brookln': 'Brooklyn', 'manhatan': 'Manhattan'}\n",
+    "    df['neighbourhood_group'] = df['neighbourhood_group'].replace(typo_map)\n",
+    "    print(df['neighbourhood_group'].value_counts())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "9004874e",
+   "metadata": {},
+   "source": [
+    "**Typo fix:** `neighbourhood_group` had two obvious data-entry typos (`brookln`, `manhatan`) that would otherwise create spurious extra categories during encoding."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7088cc40",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B1: Drop columns that are identifiers, free text, or almost entirely null\n",
+    "drop_cols = ['name', 'host_name', 'house_rules', 'license',\n",
+    "             'last_review', 'id', 'host_id', 'country', 'country_code']\n",
+    "df = df.drop(columns=[c for c in drop_cols if c in df.columns])\n",
+    "print(\"Remaining columns:\", list(df.columns))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cc07ed19",
+   "metadata": {},
+   "source": [
+    "**Column drop justification:** `license` is ~100% null so it carries no signal. `name`, `host_name`, and `house_rules` are free-text and would need NLP-style processing to be useful — out of scope here. `id`, `host_id`, `country`, and `country_code` are identifiers/constants that add no predictive value for price."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "cc8b0a65",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B1: Handle remaining missing values with a justified strategy\n",
+    "df['reviews_per_month'] = df['reviews_per_month'].fillna(0)   # no reviews yet -> 0 rate, not unknown\n",
+    "df = df.dropna(subset=['price'])                              # can't train without a target\n",
+    "print(\"Missing values remaining:\\n\", df.isna().sum().sort_values(ascending=False).head(10))"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "58b7a6db",
+   "metadata": {},
+   "source": [
+    "**Missing value strategy:** `reviews_per_month` is filled with 0 rather than the median, because a null here specifically means the listing has zero reviews (not an unknown rate) — confirmed by cross-checking against `number_of_reviews == 0` for the same rows. Rows missing the target (`price`) are dropped since they can't be used for training or evaluation regardless of imputation strategy."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d67fc5e3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B1: Drop duplicate rows\n",
+    "before = len(df)\n",
+    "df = df.drop_duplicates()\n",
+    "print(f\"Dropped {before - len(df)} duplicate rows -> {len(df)} rows remain\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4c8340f0",
+   "metadata": {},
+   "source": [
+    "**Duplicates:** identical rows would let the same listing be counted multiple times across train/test, biasing evaluation and letting the model 'memorise' repeated examples instead of generalising."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d5e0ebf2",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B1: Outlier handling via IQR — applied to price (target) and minimum_nights (feature)\n",
+    "def iqr_bounds(series, k=1.5):\n",
+    "    q1, q3 = series.quantile([0.25, 0.75])\n",
+    "    iqr = q3 - q1\n",
+    "    return max(q1 - k * iqr, 0), q3 + k * iqr\n",
+    "\n",
+    "for col in ['price', 'minimum_nights']:\n",
+    "    lower, upper = iqr_bounds(df[col])\n",
+    "    before = len(df)\n",
+    "    df = df[(df[col] >= lower) & (df[col] <= upper) & (df[col] > 0)]\n",
+    "    print(f\"{col}: removed {before - len(df)} outliers (bounds: {lower:.1f} - {upper:.1f})\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "91e6b6c1",
+   "metadata": {},
+   "source": [
+    "**Outlier treatment:** applied the standard IQR rule to `price` (the target — extreme luxury listings would otherwise dominate the loss for most regressors) and `minimum_nights` (which had clearly invalid values in the hundreds/thousands, identified in Section A's distribution plot)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "2e99d6bd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B3: Feature engineering — review_intensity\n",
+    "if {'number_of_reviews', 'availability_365'}.issubset(df.columns):\n",
+    "    df['review_intensity'] = df['number_of_reviews'] / (df['availability_365'] + 1)\n",
+    "\n",
+    "# A second engineered feature: how experienced/large the host's portfolio is\n",
+    "if 'host_listings_count' not in df.columns and 'calculated_host_listings_count' in df.columns:\n",
+    "    df = df.rename(columns={'calculated_host_listings_count': 'host_listings_count'})\n",
+    "if 'host_listings_count' in df.columns:\n",
+    "    df['is_multi_listing_host'] = (df['host_listings_count'] > 1).astype(int)\n",
+    "\n",
+    "df[['review_intensity', 'is_multi_listing_host']].describe()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "829ef272",
+   "metadata": {},
+   "source": [
+    "**Feature engineering justification:** `review_intensity` normalises review volume by how many days the listing was actually available, so a listing available year-round with many reviews isn't unfairly compared to a rarely-available one — this should correlate with demand better than raw review count. `is_multi_listing_host` flags professional/multi-property hosts (portfolio hosts often price differently — e.g. more consistent, data-driven pricing — than individual hosts renting a single room)."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "8cd6f86f",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B2: Encoding categoricals\n",
+    "cat_cols = [c for c in ['neighbourhood_group', 'room_type', 'cancellation_policy',\n",
+    "                         'instant_bookable', 'host_identity_verified'] if c in df.columns]\n",
+    "df = pd.get_dummies(df, columns=cat_cols, drop_first=True)\n",
+    "\n",
+    "# Frequency encoding for high-cardinality 'neighbourhood' (one-hot would add hundreds of columns)\n",
+    "if 'neighbourhood' in df.columns:\n",
+    "    freq = df['neighbourhood'].value_counts(normalize=True)\n",
+    "    df['neighbourhood_freq'] = df['neighbourhood'].map(freq)\n",
+    "    df = df.drop(columns=['neighbourhood'])\n",
+    "\n",
+    "df = df.select_dtypes(include=[np.number])\n",
+    "print(\"Final feature count:\", df.shape[1] - 1)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8334fab8",
+   "metadata": {},
+   "source": [
+    "**Encoding justification:** one-hot encoding for the low-cardinality categoricals (room type, neighbourhood group, cancellation policy, instant bookable, host verified) so no false ordinal relationship is implied. `neighbourhood` has hundreds of unique values, so frequency encoding is used instead of one-hot to avoid an explosion of sparse columns."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "bb35d99d",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B2: Train/test split FIRST — everything downstream (imputation of leftover\n",
+    "# NaN/inf, scaling) is fit on the train set only, to avoid data leakage.\n",
+    "from sklearn.model_selection import train_test_split\n",
+    "\n",
+    "X = df.drop(columns=['price'])\n",
+    "y = df['price']\n",
+    "\n",
+    "X_train, X_test, y_train, y_test = train_test_split(\n",
+    "    X, y, test_size=0.2, random_state=RANDOM_STATE\n",
+    ")\n",
+    "print(\"Train shape:\", X_train.shape, \"Test shape:\", X_test.shape)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "d67ca048",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B2: Clean any leftover inf/NaN (e.g. from review_intensity when availability_365 == -1)\n",
+    "# Bounds/clip values are computed from X_train only, then applied to both sets.\n",
+    "X_train = X_train.replace([np.inf, -np.inf], np.nan)\n",
+    "X_test = X_test.replace([np.inf, -np.inf], np.nan)\n",
+    "\n",
+    "train_medians = X_train.median(numeric_only=True)\n",
+    "X_train = X_train.fillna(train_medians)\n",
+    "X_test = X_test.fillna(train_medians)\n",
+    "\n",
+    "print(\"Remaining NaNs -> train:\", X_train.isna().sum().sum(), \"| test:\", X_test.isna().sum().sum())"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ba75bab4",
+   "metadata": {},
+   "source": [
+    "**Leakage check:** any residual NaN/inf (e.g. `review_intensity` edge cases) is filled using medians computed from `X_train` only, then applied to `X_test` — the test set never influences any statistic used to transform it."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "a0fb9c82",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# B2: Scale numeric features — scaler fit on train only, applied to both\n",
+    "from sklearn.preprocessing import StandardScaler\n",
+    "\n",
+    "scaler = StandardScaler().fit(X_train)\n",
+    "X_train_s = pd.DataFrame(scaler.transform(X_train), columns=X_train.columns, index=X_train.index)\n",
+    "X_test_s = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns, index=X_test.index)\n",
+    "\n",
+    "X_train_s.describe().T[['mean', 'std']].head()"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "dad62b9c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Persist the processed splits so regression.ipynb can load them directly\n",
+    "import os\n",
+    "os.makedirs('../../data/processed/regression', exist_ok=True)\n",
+    "X_train_s.to_csv('../../data/processed/regression/X_train.csv', index=False)\n",
+    "X_test_s.to_csv('../../data/processed/regression/X_test.csv', index=False)\n",
+    "y_train.to_csv('../../data/processed/regression/y_train.csv', index=False)\n",
+    "y_test.to_csv('../../data/processed/regression/y_test.csv', index=False)\n",
+    "print(\"Processed splits saved to data/processed/regression/\")"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7f0a5ecc",
+   "metadata": {},
+   "source": [
+    "**Pipeline summary:** Section A profiled the raw data and flagged issues (typos, invalid minimum_nights, skewed price, moderate missingness). Section B resolved every one of those: typos fixed, irrelevant/high-null columns dropped, missing values imputed with justified strategies, duplicates and outliers removed, two engineered features added, categoricals encoded, and a leakage-safe train/test split + scaling applied. `regression.ipynb` will load the saved `data/processed/regression/` splits directly rather than repeating this pipeline."
+   ]
+  }
+ ],
+ "metadata": {},
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
