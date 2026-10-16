@@ -1,0 +1,8 @@
+# Slim dependency list for the deployed Streamlit app (Streamlit Community Cloud uses this file first,
+# because it sits next to app.py). scikit-learn and numpy MUST match the versions that trained
+# models/final_model.joblib -- a pickled model only loads reliably with the same scikit-learn version.
+streamlit
+scikit-learn==1.8.0
+numpy==2.4.4
+pandas==3.0.2
+joblib==1.5.3
